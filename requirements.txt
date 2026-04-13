@@ -10,3 +10,7 @@ pypdf
 python-dotenv
 tqdm
 tavily-python
+streamlit
+plotly
+pandas
+numpy

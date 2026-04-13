@@ -63,7 +63,10 @@ def init_rag():
 
 def get_context(vectorstore, question):
     retrieved_docs = vectorstore.similarity_search(question, k=4)
-    context = "\n\n".join([d.page_content for d in retrieved_docs])
+    context = "\n\n".join([
+        f"[Source: {d.metadata.get('source', 'inconnu')}, Page: {d.metadata.get('page', '?')}]\n{d.page_content}"
+        for d in retrieved_docs
+    ])
     sources = list(set([d.metadata.get("source", "inconnu") for d in retrieved_docs]))
     return context, sources, retrieved_docs
 
@@ -76,7 +79,11 @@ def rag_answer(vectorstore, question, chat_history):
          "Tu es un assistant expert en analyse de documents financiers et économiques. "
          "Réponds uniquement à partir du contexte fourni. "
          "Si tu ne trouves pas la réponse, dis-le clairement. "
-         "Cite toujours tes sources avec précision.\n\n"
+         "IMPORTANT : Cite toujours tes sources avec précision en mentionnant "
+         "le nom exact du fichier source et la page. "
+         "Par exemple : 'Selon le Document d'Enregistrement Universel Sanofi 2025, page 42...' "
+         "ou 'D'après le Rapport Financier Semestriel Sanofi 2025, page 12...' "
+         "N'écris JAMAIS 'Document fourni' mais toujours le vrai nom du fichier.\n\n"
          "Contexte :\n{context}"),
         MessagesPlaceholder(variable_name="chat_history"),
         ("human", "{question}"),
@@ -172,114 +179,46 @@ def analyser_excel(chemin_fichier: str) -> str:
             f"📊 {df.shape[0]} lignes, {df.shape[1]} colonnes",
             f"Colonnes : {', '.join(df.columns.tolist())}",
             f"Statistiques :\n{df.describe().to_string()}",
-            "✅ Données chargées. Tu peux générer un dashboard."
         ]
         return "\n".join(analyse)
     except Exception as e:
         return f"Erreur analyse : {str(e)}"
-
-@tool
-def dashboard_excel(config_json: str) -> str:
-    """
-    Génère un graphique depuis les données Excel chargées.
-    JSON attendu: {"colonne_x": "...", "colonne_y": "...", "type": "bar|line|pie|scatter|histogram", "titre": "..."}
-    """
-    try:
-        config = json.loads(config_json)
-        if not Path("excel_data.json").exists():
-            return "Aucune donnée Excel. Utilisez d'abord analyser_excel."
-
-        df = pd.read_json("excel_data.json")
-        col_x = config["colonne_x"]
-        col_y = config.get("colonne_y")
-        titre = config.get("titre", "Dashboard")
-        type_graph = config.get("type", "bar")
-
-        if type_graph == "line":
-            fig = px.line(df, x=col_x, y=col_y, title=titre, markers=True)
-        elif type_graph == "pie":
-            fig = px.pie(df, names=col_x, values=col_y, title=titre)
-        elif type_graph == "scatter":
-            fig = px.scatter(df, x=col_x, y=col_y, title=titre)
-        elif type_graph == "histogram":
-            fig = px.histogram(df, x=col_x, title=titre)
-        else:
-            fig = px.bar(df, x=col_x, y=col_y, title=titre,
-                        color=col_y, color_continuous_scale="Viridis")
-
-        fig.update_layout(template="plotly_white", title_font_size=18)
-        fig.write_json("dashboard_genere.json")
-        return f"GRAPHIQUE_GENERE:dashboard_genere.json|{titre}"
-    except Exception as e:
-        return f"Erreur dashboard : {str(e)}"
 
 
 # ════════════════════════════════════════════════════════════════
 # ROUTEUR
 # ════════════════════════════════════════════════════════════════
 def router(question: str, vectorstore) -> str:
-    """Décide si la question doit être traitée par RAG, AGENT ou DIRECT."""
+    """Routeur intelligent — RAG par défaut pour toute question économique."""
 
-    # Mots clés RAG — documents financiers Sanofi/Orano
-    rag_keywords = [
-        "sanofi", "orano", "rapport", "document", "financier",
-        "chiffre d'affaires", "bilan", "stratégie", "résultat",
-        "revenu", "bénéfice", "dividende", "investissement",
-        "médicament", "pharmaceutique", "nucléaire", "uranium",
-        "urd", "semestriel", "annuel", "consolidé", "actif",
-        "passif", "dette", "trésorerie", "marge", "ebitda"
-    ]
-
-    # Mots clés AGENT — outils externes
-    agent_keywords = [
-        "météo", "actualité", "aujourd'hui", "calcul", "combien",
-        "graphique", "excel", "résume", "url", "http", "football",
-        "iran", "guerre", "news", "bourse", "prix", "taux",
-        "match", "score", "classement", "ligue", "champion"
-    ]
-
-    # Mots clés DIRECT — conversation simple
+    # Mots clés DIRECT — salutations uniquement
     direct_keywords = [
         "bonjour", "salut", "merci", "au revoir", "bonsoir",
-        "comment vas", "qui es-tu", "aide", "hello"
+        "comment vas", "qui es-tu", "hello", "bonne journée"
+    ]
+
+    # Mots clés AGENT — outils externes uniquement
+    agent_keywords = [
+        "météo", "calcul", "combien fait", "graphique",
+        "excel", "résume cet", "http", "recherche sur internet",
+        "actualité", "news", "aujourd'hui dans le monde",
+        "dashboard", "analyse le fichier", ".xlsx", ".xls"
     ]
 
     question_lower = question.lower()
 
-    # Vérification par mots clés (priorité)
+    # 1. Vérifie si c'est une salutation simple
     for keyword in direct_keywords:
         if keyword in question_lower:
             return "DIRECT"
 
-    for keyword in rag_keywords:
-        if keyword in question_lower:
-            return "RAG"
-
+    # 2. Vérifie si c'est clairement un outil
     for keyword in agent_keywords:
         if keyword in question_lower:
             return "AGENT"
 
-    # Si pas de mot clé évident → LLM décide
-    llm = ChatOpenAI(model=CHAT_MODEL, temperature=0)
-    docs = vectorstore.similarity_search(question, k=1)
-
-    prompt = (
-        f"Question : {question}\n\n"
-        f"Contexte documents disponibles : {docs[0].page_content[:300] if docs else 'aucun'}\n\n"
-        f"Réponds uniquement par : RAG, AGENT, ou DIRECT\n"
-        f"- RAG : question sur documents financiers Sanofi/Orano\n"
-        f"- AGENT : actualités, météo, calculs, graphiques, Excel\n"
-        f"- DIRECT : salutations, conversation simple"
-    )
-
-    result = llm.invoke(prompt).content.strip().upper()
-
-    if "RAG" in result:
-        return "RAG"
-    elif "AGENT" in result:
-        return "AGENT"
-    else:
-        return "DIRECT"
+    # 3. Par défaut → RAG (cherche toujours dans les documents)
+    return "RAG"
 
 
 # ════════════════════════════════════════════════════════════════
@@ -289,7 +228,7 @@ def router(question: str, vectorstore) -> str:
 def build_agent():
     llm = ChatOpenAI(model=CHAT_MODEL, temperature=0)
     tools = [search_tool, calculatrice, meteo, resumer,
-             generer_graphique, analyser_excel, dashboard_excel]
+             generer_graphique, analyser_excel]
 
     system_prompt = (
         "Tu es un assistant intelligent spécialisé en économie et finance. "
@@ -299,8 +238,7 @@ def build_agent():
         "- 🌤️ Météo : météo d'une ville\n"
         "- 📝 Résumé : texte ou URL\n"
         "- 📊 Graphique : données manuelles\n"
-        "- 📂 Analyse Excel : statistiques\n"
-        "- 📈 Dashboard : graphiques depuis Excel\n\n"
+        "- 📂 Analyse Excel : statistiques\n\n"
         "Utilise l'outil le plus approprié. Réponds toujours en français."
     )
 
@@ -344,25 +282,6 @@ def main():
                 f.write(uploaded_file.getbuffer())
             st.success(f"✅ {uploaded_file.name} chargé !")
             st.session_state["excel_path"] = excel_path
-
-        st.markdown("---")
-        st.subheader("💡 Exemples")
-        st.markdown("""
-        **📄 RAG :**
-        - Quel est le CA de Sanofi ?
-        - Quelle est la stratégie 2025 ?
-
-        **🌍 Agent :**
-        - Situation en Iran aujourd'hui ?
-        - Résultats Ligue 1 ?
-
-        **📊 Graphiques :**
-        - Graphique CA Sanofi 2022-2024
-
-        **🌤️ / 🧮 :**
-        - Météo à Paris ?
-        - Combien fait 125 * 8 ?
-        """)
 
         st.markdown("---")
         if st.button("🗑️ Effacer la conversation"):
@@ -454,13 +373,11 @@ def main():
                             graph_title = parts[1].strip() if len(parts) > 1 else "Graphique"
                             break
 
-                    # Nettoie la reponse si graphique trouve
                     if graph_path and Path(graph_path).exists():
                         response = f"✅ Graphique généré : **{graph_title}**"
 
                     st.markdown(response)
 
-                    # Affiche le graphique Plotly
                     if graph_path and Path(graph_path).exists():
                         display_graph(graph_path)
                         message_data["graph_path"] = graph_path
