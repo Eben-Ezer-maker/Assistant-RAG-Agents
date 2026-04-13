@@ -20,6 +20,14 @@ from langgraph.prebuilt import create_react_agent
 
 load_dotenv()
 
+# Lecture des secrets Streamlit Cloud
+import os
+try:
+    for key, value in st.secrets.items():
+        os.environ[key] = str(value)
+except:
+    pass
+
 # ════════════════════════════════════════════════════════════════
 # CONFIG
 # ════════════════════════════════════════════════════════════════
