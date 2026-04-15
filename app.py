@@ -298,7 +298,7 @@ def main():
             st.rerun()
 
     # ── Titre ─────────────────────────────────────────────────────
-    st.title("🤖 Yao ")
+    st.title("🤖 Yao.AI ")
     st.title("Bonjour Eben-Ezer!")
     # ── Initialisation ────────────────────────────────────────────
     with st.spinner("⏳ Chargement..."):
