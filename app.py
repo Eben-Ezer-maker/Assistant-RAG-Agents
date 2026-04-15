@@ -299,7 +299,6 @@ def main():
 
     # ── Titre ─────────────────────────────────────────────────────
     st.title("🤖 Yao ")
-    st.caption()
     st.title("Bonjour Eben-Ezer!")
     # ── Initialisation ────────────────────────────────────────────
     with st.spinner("⏳ Chargement..."):
