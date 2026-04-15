@@ -298,9 +298,9 @@ def main():
             st.rerun()
 
     # ── Titre ─────────────────────────────────────────────────────
-    st.title("🤖 Assistant RAG + Agents")
-    st.caption("Documents Sanofi 2025 • Recherche web • Graphiques • Analyse Excel")
-
+    st.title("🤖 Yao ")
+    st.caption()
+    st.title("Bonjour Eben-Ezer!")
     # ── Initialisation ────────────────────────────────────────────
     with st.spinner("⏳ Chargement..."):
         vectorstore = init_rag()
