@@ -207,11 +207,12 @@ def router(question: str, vectorstore) -> str:
 
     # Mots clés AGENT — outils externes uniquement
     agent_keywords = [
-        "météo", "calcul", "combien fait", "graphique",
-        "excel", "résume cet", "http", "recherche sur internet",
-        "actualité", "news", "aujourd'hui dans le monde",
-        "dashboard", "analyse le fichier", ".xlsx", ".xls"
-    ]
+    "météo", "calcul", "combien fait", "graphique",
+    "excel", "résume cet", "http", "recherche sur internet",
+    "actualité", "news", "aujourd'hui dans le monde",
+    "dashboard", "analyse le fichier", "analyser", "statistique",
+    "fichier", ".xlsx", ".xls"
+]
 
     question_lower = question.lower()
 
