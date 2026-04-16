@@ -110,8 +110,11 @@ def rag_answer(vectorstore, question, chat_history):
 # ════════════════════════════════════════════════════════════════
 # OUTILS AGENTS
 # ════════════════════════════════════════════════════════════════
+
+# ✅ MODIFICATION 1 : ajout de days=7 pour forcer les résultats récents
 search_tool = TavilySearchResults(
     max_results=3,
+    days=7,
     description="Recherche des actualités récentes : guerre Iran, football, économie, marchés."
 )
 
@@ -196,38 +199,38 @@ def analyser_excel(chemin_fichier: str) -> str:
 # ════════════════════════════════════════════════════════════════
 # ROUTEUR
 # ════════════════════════════════════════════════════════════════
-def router(question: str, vectorstore) -> str:
-    """Routeur intelligent — RAG par défaut pour toute question économique."""
 
-    # Mots clés DIRECT — salutations uniquement
+# ✅ MODIFICATION 2 : routeur LLM intelligent — comprend l'intention
+def router(question: str, vectorstore) -> str:
+    """Routeur intelligent — LLM décide entre RAG, AGENT et DIRECT."""
+
+    # Salutations → DIRECT (pas besoin du LLM pour ça)
     direct_keywords = [
         "bonjour", "salut", "merci", "au revoir", "bonsoir",
         "comment vas", "qui es-tu", "hello", "bonne journée"
     ]
-
-    # Mots clés AGENT — outils externes uniquement
-    agent_keywords = [
-    "météo", "calcul", "combien fait", "graphique",
-    "excel", "résume cet", "http", "recherche sur internet",
-    "actualité", "news", "aujourd'hui dans le monde",
-    "dashboard", "analyse le fichier", "analyser", "statistique",
-    "fichier", ".xlsx", ".xls"
-]
-
-    question_lower = question.lower()
-
-    # 1. Vérifie si c'est une salutation simple
     for keyword in direct_keywords:
-        if keyword in question_lower:
+        if keyword in question.lower():
             return "DIRECT"
 
-    # 2. Vérifie si c'est clairement un outil
-    for keyword in agent_keywords:
-        if keyword in question_lower:
-            return "AGENT"
+    # LLM classifie entre RAG et AGENT
+    llm = ChatOpenAI(model=CHAT_MODEL, temperature=0)
+    prompt = f"""Tu es un routeur intelligent. Classe cette question en UN seul mot parmi : RAG ou AGENT.
 
-    # 3. Par défaut → RAG (cherche toujours dans les documents)
-    return "RAG"
+- RAG : si la question concerne Sanofi, ses documents financiers, sa stratégie, ses médicaments, ses résultats, son pipeline, ses rapports
+- AGENT : si la question nécessite internet, actualité récente, météo, calcul mathématique, fichier excel, graphique, résumé d'URL
+
+Question : {question}
+
+Réponds uniquement par RAG ou AGENT, rien d'autre."""
+
+    try:
+        decision = llm.invoke(prompt).content.strip().upper()
+        if decision in ["RAG", "AGENT"]:
+            return decision
+        return "RAG"
+    except:
+        return "RAG"
 
 
 # ════════════════════════════════════════════════════════════════
@@ -301,6 +304,7 @@ def main():
     # ── Titre ─────────────────────────────────────────────────────
     st.title("🤖 Yao.AI ")
     st.title("Bonjour Eben-Ezer!")
+
     # ── Initialisation ────────────────────────────────────────────
     with st.spinner("⏳ Chargement..."):
         vectorstore = init_rag()
@@ -363,7 +367,6 @@ def main():
                     message_data["chunks"] = chunks_data
 
                 # ── AGENT ─────────────────────────────────────────
-                      
                 elif decision == "AGENT":
                     st.caption("🤖 *Agent en action...*")
                     question_agent = question
@@ -373,7 +376,7 @@ def main():
                     result = agent.invoke({
                         "messages": st.session_state.chat_history + [HumanMessage(content=question_agent)]
                     })
-                
+
                     response = result["messages"][-1].content
 
                     # Cherche le signal graphique dans tous les messages
