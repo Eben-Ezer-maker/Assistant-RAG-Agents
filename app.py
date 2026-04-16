@@ -363,15 +363,17 @@ def main():
                     message_data["chunks"] = chunks_data
 
                 # ── AGENT ─────────────────────────────────────────
-         elif decision == "AGENT":
-    st.caption("🤖 *Agent en action...*")
-    question_agent = question
-    if "excel" in question.lower() or "analyser" in question.lower() or "fichier" in question.lower():
-        if "excel_path" in st.session_state:
-            question_agent = f"{question} — chemin du fichier : {st.session_state['excel_path']}"
-    result = agent.invoke({
-        "messages": st.session_state.chat_history + [HumanMessage(content=question_agent)]
-    })
+                      
+                elif decision == "AGENT":
+                    st.caption("🤖 *Agent en action...*")
+                    question_agent = question
+                    if any(w in question.lower() for w in ["excel", "analyser", "fichier", "statistique"]):
+                        if "excel_path" in st.session_state:
+                            question_agent = f"{question} — chemin du fichier : {st.session_state['excel_path']}"
+                    result = agent.invoke({
+                        "messages": st.session_state.chat_history + [HumanMessage(content=question_agent)]
+                    })
+                
                     response = result["messages"][-1].content
 
                     # Cherche le signal graphique dans tous les messages
